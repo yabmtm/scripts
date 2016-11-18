@@ -5,6 +5,7 @@
     to be used for the FaH job. It will also create a tpr_test directory and build a test tpr, which can be run
     with "gmx mdrun -nt X -deffnm tpr_test.tpr" where X is the number of cores to use; Default vav3/gmx5: 24.
 """
+# is -nsteps a valid arg for convert-tpr or not necessary?
 
 from __future__ import print_function
 import os, re, subprocess, sys
@@ -13,7 +14,7 @@ import os, re, subprocess, sys
 proj_id = re.sub("\D", "", os.getcwd())[2:]
 
 # list current directory
-print("\nContents of current directory: ")
+print("\nContents of current directory: (" + os.getcwd() + ")")
 for i in os.listdir(os.getcwd()):
     print(i, end="  ")
 print("\n")
@@ -90,7 +91,6 @@ try: # extracting timestep from mdp file
     ps = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,stderr=subprocess.STDOUT)
     timestep = re.findall("\d+\.\d+", ps.communicate()[0])
     timestep = float(timestep[0])
-    print(timestep)
 except ValueError, e:
     print("Cannot parse mdp file for timestep.")
 
@@ -139,7 +139,7 @@ while desc_input != 'y' and desc_input != 'n':
         fout = open('project.xml', 'w')
 
         fout.write("""<project type="GRO_A7" id="%s">
-  <min-core-version v="227"/>
+  <min-core-version v="0.0.0"/>
 
   <!-- project settings -->
   <runs v="1"/>
@@ -155,30 +155,52 @@ while desc_input != 'y' and desc_input != 'n':
   <stats_credit v="%d"/>
   <timeout v="%f"/>
   <deadline v="%f"/>
-  <give-credit-bonus v="true"/>
   <k-factor v="0.75"/>
+  <give-credit-bonus v="true"/> <!-- is this needed? -->
 
   <description v="%s %s"/>
   <contact v="voelz@temple.edu"/>
 
-  <accept-mode v="assign"/>
-  <!-- <accept-mode v="accept"/> -->
+  <accept-mode v="assign"/> <!-- is this needed? -->
 
-  <tpr-scheme v="external"/>
-  <!-- NOTE: this fixes #215:Exception: Couldn't find 'nsteps' and/or 'dt' in '/array1/server2/projects/Gromacs/p8618/ -->
+  <send>
+    frame$gen.tpr
+  </send>
+
+  <return>
+    frame*.trr
+    md.log
+    *.xtc
+  </return>
+  
+  <core-args>
+    -s frame$gen.tpr
+    -o frame$gen.trr
+  </core-args>
 
   <create-command>
-    /usr/local/bin/gromacs-5.0.4/bin/grompp -f $indir/%s -c $indir/%s -p $indir/%s -n $indir/%s -o $output -po $outdir/mdout.mdp -maxwarn 1
+    /usr/local/bin/gromacs-5.0.4/bin/grompp -c $home/%s -f $home/%s -p $home/%s -n $home/%s \
+     -o $jobdir/frame0.tpr -po $jobdir/mdout.mdp -maxwarn 1
   </create-command>
 
   <next-gen-command>
-    /usr/local/bin/gromacs-5.0.4/bin/tpbconv -s $outdir/frame0.tpr -f $outdir/frame$gen.trr -o $output -nsteps %d
+    /usr/local/bin/gromacs-5.0.4/bin/convert-tpr -s $jobdir/frame0.tpr -f $results/frame$prev-gen.trr \
+     -o $jobdir/frame$gen.tpr -extend $gen
   </next-gen-command>
-</project>""" % (proj_id, atoms, simulation_time, points, timeout, deadline, proj_id, description, structure, mdp, topology, index_, steps))
+</project>""" % (proj_id, atoms, simulation_time, points, timeout, deadline, proj_id, description, structure, mdp, topology, index_))
 print("\nproject.xml generated. Please check that the number of runs, clones, gens is correct!\n")
 
 tpr_input = raw_input("\nWould you like to run a tpr test? (y/n): ")
 if tpr_input == 'y':
-    os.system("mkdir test_a_tpr; cp {" + structure + "," + mdp + "," + topology + "," + index_ + "} test_a_tpr; cd test_a_tpr")
+    os.system("mkdir test_a_tpr; cp {" + structure + "," + mdp + "," + topology + "," + index_ + "} test_a_tpr; cp *itp test_a_tpr")
+    for i in os.listdir(os.getcwd()):
+        if "amber" in i:
+            os.system("cp -r " + i + " test_a_tpr")
+    os.chdir("test_a_tpr")
     os.system("/usr/local/bin/gromacs-5.0.4/bin/grompp -f " + mdp + " -c " + structure + " -p " + topology + " -n " + index_ + " -o " + " tpr_test.tpr")
 
+    run_input = raw_input("\n Would you like to start a test run of your tpr? (y/n): ")
+    if run_input == 'y':
+        os.system("procs=$(nproc); gmx mdrun -v -nt $((procs/2)) -deffnm tpr_test")
+        os.chdir("..")
+        
