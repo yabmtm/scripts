@@ -7,24 +7,24 @@ from simtk.openmm import app
 from openmmforcefields.generators import SystemGenerator
 import pandas as pd
 import parmed
-import os, sys, subprocess
+import glob, os, sys, subprocess
 
 water_model = 'tip3p'
 solvent_padding = 10.0 * unit.angstrom
-box_size = openmm.vec3.Vec3(3.4,3.4,3.4)*unit.nanometers
+box_size = openmm.vec3.Vec3(3.7,3.7,3.7)*unit.nanometers
 ionic_strength = 100 * unit.millimolar # 100
 pressure = 1.0 * unit.atmospheres
 collision_rate = 91.0 / unit.picoseconds
 temperature = 300.0 * unit.kelvin
 timestep = 4.0 * unit.femtoseconds
-nsteps_equil = 5000 # test
+nsteps_equil = 25000 # test
 
 protein_forcefield = 'amber14/protein.ff14SB.xml'
 small_molecule_forcefield = 'openff-1.1.0'
 #small_molecule_forcefield = 'gaff-2.11' # only if you really like atomtypes
 solvation_forcefield = 'amber14/tip3p.xml'
 
-dataset = 'DATA'
+dataset = 'ROS'
 #ligand_data = pd.read_pickle(f'ligands.pkl')
 openmm_write_cutoff = 0 # only write XML files for first n ligands (bc they big)
 
@@ -136,14 +136,14 @@ def prepare_L_system():
 
 for ligand_ndx in range(int(sys.argv[1]),int(sys.argv[2])):
 
-    print(f'Processing LIG{ligand_ndx}...')
+    print(f'Processing RUN{ligand_ndx}...')
 
     try:
-        RL_output_prefix = f'{dataset}_RL/LIG{ligand_ndx}'
-        L_output_prefix = f'{dataset}_L/LIG{ligand_ndx}'
-        ligand_file = f'{L_output_prefix}/LIG{ligand_ndx}_h.sdf'
-        ligand_file_pdb = f'{L_output_prefix}/LIG{ligand_ndx}_h.pdb'
-        receptor_file = f'receptors/fixed_receptor_{ligand_ndx}.pdb'
+        receptor_file = glob.glob(f'{dataset}_RL/RUN{ligand_ndx}/protein*pdb')[0]
+        RL_output_prefix = f'{dataset}_RL/RUN{ligand_ndx}'
+        L_output_prefix = f'{dataset}_L/RUN{ligand_ndx}'
+        ligand_file = glob.glob(f'{L_output_prefix}/*.sdf')[0]
+        ligand_file_pdb = glob.glob(f'{L_output_prefix}/ligand*pdb')[0]
 
         ligand = Molecule.from_file(ligand_file)
         receptor = app.PDBFile(receptor_file)
@@ -157,20 +157,20 @@ for ligand_ndx in range(int(sys.argv[1]),int(sys.argv[2])):
 
     # prepare RL system
     if not os.path.exists(f'{RL_output_prefix}/conf.gro'):
-        print(f'Processing RL System for LIG{ligand_ndx}')
+        print(f'Processing RL System for RUN{ligand_ndx}')
         try: # catch bad ligands
             prepare_RL_system()
         except Exception as e:
             with open(f'{RL_output_prefix}/exception','w') as f:
-                f.write(f'Exception occured with LIG{ligand_ndx}: {e}')
+                f.write(f'Exception occured with RUN{ligand_ndx}: {e}')
             continue
 
     # prepare L system
     if not os.path.exists(f'{L_output_prefix}/conf.gro'):
-        print(f'Processing L System for LIG{ligand_ndx}')
+        print(f'Processing L System for RUN{ligand_ndx}')
         try: # catch bad ligands
             prepare_L_system()
         except Exception as e:
             with open(f'{L_output_prefix}/exception','w') as f:
-                f.write(f'Exception occured with LIG{ligand_ndx}: {e}')
+                f.write(f'Exception occured with RUN{ligand_ndx}: {e}')
             continue
